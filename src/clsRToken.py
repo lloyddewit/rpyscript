@@ -1,3 +1,4 @@
+"""
 class clsRToken(object):
     class typToken:
         RSyntacticName = 0
@@ -185,3 +186,4 @@ class clsRToken(object):
         "next"
         "break"
         return arrKeyWords.Contains(strTxt)
+"""

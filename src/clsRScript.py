@@ -1,4 +1,4 @@
-class clsRScript(object):
+""" class clsRScript(object):
     class typTokenState:
         WaitingForOpenCondition = 0
         WaitingForCloseCondition = 0
@@ -134,3 +134,4 @@ class clsRScript(object):
         for clsStatement in lstRStatements:
             clsStatement.GetAsExecutableScript()
         return strTxt
+ """

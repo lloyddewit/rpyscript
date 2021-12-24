@@ -29,7 +29,6 @@ examples.
   foo = ClassFoo()
   bar = foo.FunctionBar()
 """
-from _typeshed import Self
 from typing import List
 from collections import deque
 from enum import Enum
@@ -73,47 +72,68 @@ class RToken:
         eggs: An integer count of the eggs we have laid.
     """
 
-    def __init__(self, lexeme_prev, lexeme_current, lexeme_next, lexeme_next_on_same_line) -> None:
-        self.enuToken = None
-        #self.lstTokens = List[clsRToken]()
+    def __init__(self, lexeme_prev: str, lexeme_current: str, lexeme_next: str, lexeme_next_on_same_line: bool) -> None:
+        """
+        Constructs a token 'lexeme_current'.
+        A token is a string of characters that represent a valid R element, plus meta data about
+        the token type (identifier, operator, keyword, bracket etc.).
+        'lexeme_prev' and 'lexeme_next' are needed to correctly identify if 'lexeme_current' is 
+        a unary or binary operator. 'lexeme_next_on_same_line' is needed to identify function 
+        names and unary left operators.
+
+        Args:
+            lexeme_prev:              The lexeme that comes directly before the current lexeme
+            lexeme_current:           The lexeme to convert to a token
+            lexeme_next:              The lexeme that comes directly after the current lexeme
+            lexeme_next_on_same_line: True if the next lexeme is on the same line, else false.
+
+        Returns
+            None.
+        """
+        
         if not lexeme_current:
             return
 
-        strTxt = lexeme_current
+        self.token_type: TokenType = TokenType.INVALID
+        self.text: str = lexeme_current
+
         if rlexeme.is_keyword(lexeme_current):
-            enuToken = TokenType.KEY_WORD
+            self.token_type = TokenType.KEY_WORD
         elif rlexeme.is_syntactic_name(lexeme_current):
             if lexeme_next == "(" and lexeme_next_on_same_line:
-                enuToken = TokenType.FUNCTION_NAME
+                self.token_type = TokenType.FUNCTION_NAME
             else:
-                enuToken = TokenType.SYNTACTIC_NAME
+                self.token_type = TokenType.SYNTACTIC_NAME
         elif rlexeme.is_comment(lexeme_current):
-            enuToken = TokenType.COMMENT
+            self.token_type = TokenType.COMMENT
         elif rlexeme.is_constant_string(lexeme_current):
-            enuToken = TokenType.CONSTANT_STRING
+            self.token_type = TokenType.CONSTANT_STRING
         elif rlexeme.is_newline(lexeme_current):
-            enuToken = TokenType.NEW_LINE
+            self.token_type = TokenType.NEW_LINE
         elif lexeme_current == ";":
-            enuToken = TokenType.END_STATEMENT
+            self.token_type = TokenType.END_STATEMENT
         elif lexeme_current == ",":
-            enuToken = TokenType.SEPARATOR
+            self.token_type = TokenType.SEPARATOR
         elif rlexeme.is_sequence_of_spaces(lexeme_current):
-            enuToken = TokenType.SPACE
+            # sequence of spaces (needs to be after separator check, 
+            #   else linefeed is recognised as space)
+            self.token_type = TokenType.SPACE
         elif rlexeme.is_bracket(lexeme_current):
             if lexeme_current == "}":
-                enuToken = TokenType.END_SCRIPT
+                self.token_type = TokenType.END_SCRIPT
             else:
-                enuToken = TokenType.BRACKET
+                self.token_type = TokenType.BRACKET
         elif rlexeme.is_operator_brackets(lexeme_current):
-            enuToken = TokenType.OPERATOR_BRACKET
-        elif rlexeme.is_operator_unary(lexeme_current) and not lexeme_prev or not re.search('[a-zA-Z0-9_\\.)\\]]$', lexeme_prev):
-            enuToken = TokenType.OPERATOR_UNARY_RIGHT
-        elif lexeme_current == "~" and not lexeme_next or not lexeme_next_on_same_line or not re.search('^[a-zA-Z0-9_\\.(\\+\\-\\!~]', lexeme_next):
-            enuToken = TokenType.OPERATOR_UNARY_LEFT
-        elif rlexeme.is_operator_reserved(lexeme_current) or re.search("^%.*%$", lexeme_current):
-            enuToken = TokenType.OPERATOR_BINARY
-        else:
-            enuToken = TokenType.INVALID
+            self.token_type = TokenType.OPERATOR_BRACKET     # bracket operator     (e.g. '[')
+        elif rlexeme.is_operator_unary(lexeme_current) \
+                and (not lexeme_prev or not re.search('[a-zA-Z0-9_\\.)\\]]$', lexeme_prev)):
+            self.token_type = TokenType.OPERATOR_UNARY_RIGHT # unary right operator (e.g. '!x')
+        elif lexeme_current == "~" \
+                and (not lexeme_next or not lexeme_next_on_same_line \
+                     or not re.search('^[a-zA-Z0-9_\\.(\\+\\-\\!~]', lexeme_next)):
+            self.token_type = TokenType.OPERATOR_UNARY_LEFT  # unary left operator  (e.g. x~)
+        elif rlexeme.is_operator_reserved(lexeme_current) or re.search('^%%.*%%$', lexeme_current):
+            self.token_type = TokenType.OPERATOR_BINARY      # 'binary operator     (e.g. '+')
 
 def get_tokens(lexemes: List[str]) -> List[RToken]:
     tokens : List[RToken] = []
@@ -183,7 +203,7 @@ def get_tokens(lexemes: List[str]) -> List[RToken]:
                 num_open_brackets_stack.append(0)
 
         # identify the token associated with the current lexeme and add the token to the list
-        clsToken = clsRToken(lexeme_prev, lexeme_current, lexeme_next, lexeme_next_on_same_line)
+        token = RToken(lexeme_prev, lexeme_current, lexeme_next, lexeme_next_on_same_line)
 
         """ Process key words
                 Determine whether the next end statement will also be the end of the current script.
@@ -193,45 +213,78 @@ def get_tokens(lexemes: List[str]) -> List[RToken]:
                 For example:
                     if(x <= 0) y <- log(1+x) else y <- log(x)
         """
-        if clsToken.enuToken == TokenType.COMMENT or clsToken.enuToken == TokenType.SPACE:
+        if token.token_type == TokenType.COMMENT or token.token_type == TokenType.SPACE:
+            # ignore comments and spaces (they don't affect key word processing)
             pass
         else:
-            if token_state_stack[-1] == TokenState.WAITING_FOR_OPEN_CONDITION:
-                if (not clsToken.enuToken == TokenType.NEW_LINE):
-                    if clsToken.strTxt == "(":
+            match token_state_stack[-1]:
+                case TokenState.WAITING_FOR_OPEN_CONDITION:
+                    if not token.token_type == TokenType.NEW_LINE and token.text == "(":
                         token_state_stack.pop()
                         token_state_stack.append(TokenState.WAITING_FOR_CLOSE_CONDITION)
-            elif token_state_stack[-1] == TokenState.WAITING_FOR_CLOSE_CONDITION:
-                if num_open_brackets_stack[-1] == 0:
-                    token_state_stack.pop()
-                    token_state_stack.append(TokenState.WAITING_FOR_START_SCRIPT)
-            elif token_state_stack[-1] == TokenState.WAITING_FOR_START_SCRIPT:
-                if (not clsToken.enuToken == TokenType.COMMENT or clsToken.enuToken == TokenType.PRESENTATION or clsToken.enuToken == TokenType.SPACE or clsToken.enuToken == TokenType.NEW_LINE):
-                    token_state_stack.pop()
-                    token_state_stack.append(TokenState.WAITING_FOR_END_SCRIPT)
-                    if clsToken.strTxt == "{":
-                        is_script_enclosed_by_curly_brackets_stack.append(True)
-                    else:
-                        is_script_enclosed_by_curly_brackets_stack.append(False)
-            elif token_state_stack[-1] == TokenState.WAITING_FOR_END_SCRIPT:
-                if clsToken.enuToken == TokenType.NEW_LINE and statement_contains_element and num_open_brackets_stack[-1] == 0 and not rlexeme.is_operator_user_defined(lexeme_prev and (not rlexeme.is_operator_reserved(lexeme_prev) and (not lexeme_prev == "~":
-                    clsToken.enuToken = TokenType.END_STATEMENT
-                    statement_contains_element = False
-                if clsToken.enuToken == TokenType.END_STATEMENT and is_script_enclosed_by_curly_brackets_stack[-1] == False and str.IsNullOrEmpty(strLexemeNext):
-                    clsToken.enuToken = TokenType.END_SCRIPT
-                if clsToken.enuToken == TokenType.END_SCRIPT:
-                    is_script_enclosed_by_curly_brackets_stack.pop()
-                    num_open_brackets_stack.pop()
-                    token_state_stack.pop()
-            else:
-                raise Exception("The token is in an unknown state.")
-        lstRTokens.Add(clsToken)
-        if clsToken.enuToken == TokenType.END_SCRIPT and str.IsNullOrEmpty(strLexemeNext):
-            return lstRTokens
+                case TokenState.WAITING_FOR_CLOSE_CONDITION:
+                    if num_open_brackets_stack[-1] == 0:
+                        token_state_stack.pop()
+                        token_state_stack.append(TokenState.WAITING_FOR_START_SCRIPT)
+                case TokenState.WAITING_FOR_START_SCRIPT:
+                    if not (token.token_type in (TokenType.COMMENT, TokenType.PRESENTATION, 
+                                                 TokenType.SPACE, TokenType.NEW_LINE)):
+                        token_state_stack.pop()
+                        token_state_stack.append(TokenState.WAITING_FOR_END_SCRIPT)
+                        if token.text == "{":
+                            # script will terminate with '}'
+                            is_script_enclosed_by_curly_brackets_stack.append(True)
+                        else:
+                            # script will terminate with end statement
+                            is_script_enclosed_by_curly_brackets_stack.append(False)
+                case TokenState.WAITING_FOR_END_SCRIPT:
+                    """ 
+                    a new line indicates the end of the statement when:
+                        - statement contains at least one R element 
+                            (i.e. not just spaces, comments, or newlines)
+                        - there are no open brackets
+                        - line doesn't end in a user-defined operator
+                        - line doesn't end in a predefined operator, 
+                            unless it's a tilda (the only operator that doesn't need a right-hand value)
+                    """
+                    if token.token_type == TokenType.NEW_LINE \
+                            and statement_contains_element \
+                            and num_open_brackets_stack[-1] == 0 \
+                            and not rlexeme.is_operator_user_defined(lexeme_prev) \
+                            and not rlexeme.is_operator_reserved(lexeme_prev) \
+                            and not lexeme_prev == "~":
+                        token.token_type = TokenType.END_STATEMENT
+                        statement_contains_element = False
+                    if token.token_type == TokenType.END_STATEMENT and is_script_enclosed_by_curly_brackets_stack[-1] == False and not lexeme_next:
+                        token.token_type = TokenType.END_SCRIPT
+                    if token.token_type == TokenType.END_SCRIPT:
+                        is_script_enclosed_by_curly_brackets_stack.pop()
+                        num_open_brackets_stack.pop()
+                        token_state_stack.pop()
+                case _:
+                    raise Exception("The token is in an unknown state.")
+        
+        tokens.append(token)
+
+        """
+        If the script has ended and there are no more R elements to process, 
+        then return the token list.
+         
+        Note: Any formatting lexemes (i.e. spaces, comments or extra newlines), after the 
+        script's final statement, will not be added to the token list.
+        For example, for the script below, '#comment1' will be added to the token list but 
+        '#comment2' will not:
+              
+            a <- 1
+            b <- a * 2 #comment1
+            #comment2
+                  
+        This was a deliberate design decision. Spaces, comments or extra newlines at the end 
+        of a script serve no practical purpose and are rarely used.
+        However storing these extra formatting lexemes would increase source code complexity.
+        """
+        if token.token_type == TokenType.END_SCRIPT and not lexeme_next:
+            return tokens
         pos += 1
 
     return tokens
-
-def get_tokens_as_string(tokens: List[RToken]) -> str:
-    tokens_str : str = ""
-    return tokens_str
