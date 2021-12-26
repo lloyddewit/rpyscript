@@ -234,16 +234,16 @@ def test_get_lst_tokens():
     assert actual == expected
 
     # standard operators ROperatorUnaryLeft, ROperatorUnaryRight, ROperatorBinary
-    input_string = 'a::b:::ba$c@d^e:ea%%f%/%g%*%h%o%i%x%j%in%k/l*m+n-o<p>q<=r>=s==t!=u!v&wx&&y|z' + \
+    input_string = 'a::b:::ba$c@d^e:ea%%%%f%%/%%g%%*%%h%%o%%i%%x%%j%%in%%k/l*m+n-o<p>q<=r>=s==t!=u!v&wx&&y|z' + \
                 '||a2~2b->c0a->>d0123456789a<-1234567890<<-e0a1b2=345f6789+a/(b)*((c))+(d-e)/f*g' + \
                 '+(((d-e)/f)*g)+f1(a,b~,c,~d,e~(f+g),h~!i)'
     expected = 'a(RSyntacticName), ::(ROperatorBinary), b(RSyntacticName), ' + \
                 ':::(ROperatorBinary), ba(RSyntacticName), $(ROperatorBinary), ' + \
                 'c(RSyntacticName), @(ROperatorBinary), d(RSyntacticName), ^(ROperatorBinary), ' + \
-                'e(RSyntacticName), :(ROperatorBinary), ea(RSyntacticName), %%(ROperatorBinary), ' + \
-                'f(RSyntacticName), %/%(ROperatorBinary), g(RSyntacticName), %*%(ROperatorBinary), ' + \
-                'h(RSyntacticName), %o%(ROperatorBinary), i(RSyntacticName), %x%(ROperatorBinary), ' + \
-                'j(RSyntacticName), %in%(ROperatorBinary), k(RSyntacticName), /(ROperatorBinary), ' + \
+                'e(RSyntacticName), :(ROperatorBinary), ea(RSyntacticName), %%%%(ROperatorBinary), ' + \
+                'f(RSyntacticName), %%/%%(ROperatorBinary), g(RSyntacticName), %%*%%(ROperatorBinary), ' + \
+                'h(RSyntacticName), %%o%%(ROperatorBinary), i(RSyntacticName), %%x%%(ROperatorBinary), ' + \
+                'j(RSyntacticName), %%in%%(ROperatorBinary), k(RSyntacticName), /(ROperatorBinary), ' + \
                 'l(RSyntacticName), *(ROperatorBinary), m(RSyntacticName), +(ROperatorBinary), ' + \
                 'n(RSyntacticName), -(ROperatorBinary), o(RSyntacticName), <(ROperatorBinary), ' + \
                 'p(RSyntacticName), >(ROperatorBinary), q(RSyntacticName), <=(ROperatorBinary), ' + \
@@ -274,15 +274,15 @@ def test_get_lst_tokens():
     assert actual == expected
 
     # user-defined operators
-    input_string = '.a%%a_2ab%/%ac%*%aba%o%aba2%x%abaa%in%abaaa%>%abcdefg%mydefinedoperator%hijklmnopqrstuvwxyz'
-    expected = '.a(RSyntacticName), %%(ROperatorBinary), ' + \
-                'a_2ab(RSyntacticName), %/%(ROperatorBinary), ' + \
-                'ac(RSyntacticName), %*%(ROperatorBinary), ' + \
-                'aba(RSyntacticName), %o%(ROperatorBinary), ' + \
-                'aba2(RSyntacticName), %x%(ROperatorBinary), ' + \
-                'abaa(RSyntacticName), %in%(ROperatorBinary), ' + \
-                'abaaa(RSyntacticName), %>%(ROperatorBinary), ' + \
-                'abcdefg(RSyntacticName), %mydefinedoperator%(ROperatorBinary), ' + \
+    input_string = '.a%%%%a_2ab%%/%%ac%%*%%aba%%o%%aba2%%x%%abaa%%in%%abaaa%%>%%abcdefg%%mydefinedoperator%%hijklmnopqrstuvwxyz'
+    expected = '.a(RSyntacticName), %%%%(ROperatorBinary), ' + \
+                'a_2ab(RSyntacticName), %%/%%(ROperatorBinary), ' + \
+                'ac(RSyntacticName), %%*%%(ROperatorBinary), ' + \
+                'aba(RSyntacticName), %%o%%(ROperatorBinary), ' + \
+                'aba2(RSyntacticName), %%x%%(ROperatorBinary), ' + \
+                'abaa(RSyntacticName), %%in%%(ROperatorBinary), ' + \
+                'abaaa(RSyntacticName), %%>%%(ROperatorBinary), ' + \
+                'abcdefg(RSyntacticName), %%mydefinedoperator%%(ROperatorBinary), ' + \
                 'hijklmnopqrstuvwxyz(RSyntacticName), '
     actual = get_tokens_as_string(rtoken.get_tokens(rlexeme.get_lexemes(input_string)))
     assert actual == expected
@@ -322,11 +322,11 @@ def test_get_lst_tokens():
                 '\ncomplete() * g~' + \
                 '\nincomplete::\n' + \
                 '\nincomplete::h i::: \nia' + \
-                '\nincomplete %>% #comment\nib' + \
+                '\nincomplete %%>%% #comment\nib' + \
                 '\nincomplete(\nic)' + \
                 '\nincomplete()[id \n]' + \
                 '\nincomplete([[j[k]]]  \n)' + \
-                '\nincomplete >= \n  #comment \n" "\nl\n'
+                '\nincomplete >= \n  #comment \n\nl\n'
     expected = 'complete(RSyntacticName), ' + \
                 '\n(REndStatement), complete(RFunctionName), ((RBracket), )(RBracket), ' + \
                 '\n(REndStatement), complete(RFunctionName), ((RBracket), a(RSyntacticName), ' + \
@@ -345,7 +345,7 @@ def test_get_lst_tokens():
                 '\n(RNewLine), incomplete(RSyntacticName), ::(ROperatorBinary), ' + \
                 'h(RSyntacticName),  (RSpace), i(RSyntacticName), :::(ROperatorBinary),  (RSpace), ' + \
                 '\n(RNewLine), ia(RSyntacticName), ' + \
-                '\n(REndStatement), incomplete(RSyntacticName),  (RSpace), %>%(ROperatorBinary), ' + \
+                '\n(REndStatement), incomplete(RSyntacticName),  (RSpace), %%>%%(ROperatorBinary), ' + \
                 ' (RSpace), #comment(RComment), ' + \
                 '\n(RNewLine), ib(RSyntacticName), ' + \
                 '\n(REndStatement), incomplete(RFunctionName), ((RBracket), ' + \
@@ -364,4 +364,7 @@ def test_get_lst_tokens():
     actual = get_tokens_as_string(rtoken.get_tokens(rlexeme.get_lexemes(input_string)))
     assert actual == expected
 
+def test_get_as_executable_script():
+    # RSyntacticName
+    input_string = ''
 

@@ -251,8 +251,7 @@ def get_tokens(lexemes: List[str]) -> List[RToken]:
                             and statement_contains_element \
                             and num_open_brackets_stack[-1] == 0 \
                             and not rlexeme.is_operator_user_defined(lexeme_prev) \
-                            and not rlexeme.is_operator_reserved(lexeme_prev) \
-                            and not lexeme_prev == "~":
+                            and not (rlexeme.is_operator_reserved(lexeme_prev) and not lexeme_prev == "~"):
                         token.token_type = TokenType.END_STATEMENT
                         statement_contains_element = False
                     if token.token_type == TokenType.END_STATEMENT and is_script_enclosed_by_curly_brackets_stack[-1] == False and not lexeme_next:

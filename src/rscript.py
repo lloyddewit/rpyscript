@@ -40,8 +40,31 @@ class RScript:
         likes_spam: A boolean indicating if we like SPAM or not.
         eggs: An integer count of the eggs we have laid.
     """
+
     def __init__(self, script_str: str) -> None:
-        pass
+        self.statements = List[clsRStatement]()
+        if str.IsNullOrEmpty(strInput):
+            return
+        lstLexemes = self.GetLstLexemes(strInput)
+        lstTokens = self.GetLstTokens(lstLexemes)
+        intPos = 0
+        dctAssignments = Dictionary[(str, clsRStatement)]()
+        while ((intPos < lstTokens.Count)):
+            clsStatement = clsRStatement(lstTokens, intPos, dctAssignments)
+            lstRStatements.Add(clsStatement)
+            if (not ((clsStatement.clsAssignment == None))):
+                if dctAssignments.ContainsKey(clsStatement.clsAssignment.strTxt):
+                    dctAssignments(clsStatement.clsAssignment.strTxt) = clsStatement
+                else:
+                    dctAssignments.Add(clsStatement.clsAssignment.strTxt, clsStatement)
+    
+    def GetAsExecutableScript(self):
+        strTxt = ""
+        for clsStatement in lstRStatements:
+            clsStatement.GetAsExecutableScript()
+        return strTxt
+
+
     
 
 
