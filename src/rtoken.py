@@ -61,7 +61,7 @@ class TokenType(Enum):
     PRESENTATION = 16
     INVALID = 17
 
-class RToken:
+class RToken(object):
     """TODO Summary of class here.
 
     Longer class information....
@@ -72,9 +72,9 @@ class RToken:
         eggs: An integer count of the eggs we have laid.
     """
 
-    def __init__(self, lexeme_prev: str, lexeme_current: str, lexeme_next: str, lexeme_next_on_same_line: bool) -> None:
+    def __init__(self, lexeme_current: str, lexeme_prev: str = "", lexeme_next: str = "", lexeme_next_on_same_line: bool = False, token_type: TokenType = TokenType.INVALID) -> None:
         """
-        Constructs a token 'lexeme_current'.
+        Constructs a token from the text specified in 'lexeme_current'.
         A token is a string of characters that represent a valid R element, plus meta data about
         the token type (identifier, operator, keyword, bracket etc.).
         'lexeme_prev' and 'lexeme_next' are needed to correctly identify if 'lexeme_current' is 
@@ -94,8 +94,12 @@ class RToken:
         if not lexeme_current:
             return
 
-        self.token_type: TokenType = TokenType.INVALID
         self.text: str = lexeme_current
+        self.children: List[RToken] = []
+        self.token_type: TokenType = token_type
+
+        if self.token_type != TokenType.INVALID:
+            return
 
         if rlexeme.is_keyword(lexeme_current):
             self.token_type = TokenType.KEY_WORD
@@ -134,6 +138,14 @@ class RToken:
             self.token_type = TokenType.OPERATOR_UNARY_LEFT  # unary left operator  (e.g. x~)
         elif rlexeme.is_operator_reserved(lexeme_current) or re.search('^%%.*%%$', lexeme_current):
             self.token_type = TokenType.OPERATOR_BINARY      # 'binary operator     (e.g. '+')
+
+    def CloneMe(self):
+        token = RToken(self.text, token_type = self.token_type)
+        for clsTokenChild in self.children:
+            if ((clsTokenChild == None)):
+                raise Exception("Token has illegal empty child.")
+            token.children.append(clsTokenChild.CloneMe())
+        return token
 
 def get_tokens(lexemes: List[str]) -> List[RToken]:
     tokens : List[RToken] = []
@@ -203,7 +215,7 @@ def get_tokens(lexemes: List[str]) -> List[RToken]:
                 num_open_brackets_stack.append(0)
 
         # identify the token associated with the current lexeme and add the token to the list
-        token = RToken(lexeme_prev, lexeme_current, lexeme_next, lexeme_next_on_same_line)
+        token = RToken(lexeme_current, lexeme_prev, lexeme_next, lexeme_next_on_same_line)
 
         """ Process key words
                 Determine whether the next end statement will also be the end of the current script.

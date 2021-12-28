@@ -30,7 +30,12 @@ examples.
   bar = foo.FunctionBar()
 """
 
-class RScript:
+from typing import Dict, List
+from rtoken import RToken
+from rstatement import RStatement
+
+
+class RScript(object):
     """TODO Summary of class here.
 
     Longer class information....
@@ -42,27 +47,28 @@ class RScript:
     """
 
     def __init__(self, script_str: str) -> None:
-        self.statements = List[clsRStatement]()
-        if str.IsNullOrEmpty(strInput):
+        if not script_str:
             return
-        lstLexemes = self.GetLstLexemes(strInput)
-        lstTokens = self.GetLstTokens(lstLexemes)
-        intPos = 0
-        dctAssignments = Dictionary[(str, clsRStatement)]()
-        while ((intPos < lstTokens.Count)):
-            clsStatement = clsRStatement(lstTokens, intPos, dctAssignments)
-            lstRStatements.Add(clsStatement)
+
+        self.tokens: List[RToken] = []
+        self.statements: List[RStatement] = []        
+        pos = 0
+        assignments: Dict[str, RStatement] = {}
+"""         while pos < len(self.tokens):
+            clsStatement: clsRStatement = RStatement(self.tokens, pos, assignments)
+            self.statements.append(clsStatement)
             if (not ((clsStatement.clsAssignment == None))):
-                if dctAssignments.ContainsKey(clsStatement.clsAssignment.strTxt):
-                    dctAssignments(clsStatement.clsAssignment.strTxt) = clsStatement
+                if assignments.ContainsKey(clsStatement.clsAssignment.strTxt):
+                    assignments(clsStatement.clsAssignment.strTxt) = clsStatement
                 else:
-                    dctAssignments.Add(clsStatement.clsAssignment.strTxt, clsStatement)
-    
+                    assignments.Add(clsStatement.clsAssignment.strTxt, clsStatement)
+     
     def GetAsExecutableScript(self):
         strTxt = ""
-        for clsStatement in lstRStatements:
+        for clsStatement in self.statements:
             clsStatement.GetAsExecutableScript()
         return strTxt
+"""
 
 
     

@@ -1,4 +1,4 @@
-from System.Text.RegularExpressions import *
+""" from System.Text.RegularExpressions import *
 class clsRStatement(object):
     def __init__(self, lstTokens, intPos, dctAssignments):
         self.bTerminateWithNewline = True
@@ -88,3 +88,4 @@ class clsRStatement(object):
             ";"
             return strScript
 
+ """
