@@ -29,9 +29,39 @@ examples.
   foo = ClassFoo()
   bar = foo.FunctionBar()
 """
+from typing import List
+from collections import deque
+from enum import Enum
 import re
 
-class RToken:
+import rlexeme
+
+class TokenState(Enum):
+    WAITING_FOR_OPEN_CONDITION = 1
+    WAITING_FOR_CLOSE_CONDITION = 2 
+    WAITING_FOR_START_SCRIPT = 3 
+    WAITING_FOR_END_SCRIPT = 4
+
+class TokenType(Enum):
+    SYNTACTIC_NAME = 1
+    FUNCTION_NAME =2
+    KEY_WORD = 3
+    CONSTANT_STRING = 4
+    COMMENT = 5
+    SPACE = 6
+    BRACKET = 7
+    SEPARATOR = 8
+    END_STATEMENT = 9
+    END_SCRIPT = 10
+    NEW_LINE = 11
+    OPERATOR_UNARY_LEFT = 12
+    OPERATOR_UNARY_RIGHT = 13
+    OPERATOR_BINARY = 14
+    OPERATOR_BRACKET = 15
+    PRESENTATION = 16
+    INVALID = 17
+
+class RToken(object):
     """TODO Summary of class here.
 
     Longer class information....
@@ -41,236 +71,231 @@ class RToken:
         likes_spam: A boolean indicating if we like SPAM or not.
         eggs: An integer count of the eggs we have laid.
     """
-    def __init__(self) -> None:
-        pass
 
-    @staticmethod
-    def is_valid_lexeme(txt: str) -> bool:
+    def __init__(self, lexeme_current: str, lexeme_prev: str = "", lexeme_next: str = "", lexeme_next_on_same_line: bool = False, token_type: TokenType = TokenType.INVALID) -> None:
         """
-        Returns true if txt is a valid lexeme, else returns false.
+        Constructs a token from the text specified in 'lexeme_current'.
+        A token is a string of characters that represent a valid R element, plus meta data about
+        the token type (identifier, operator, keyword, bracket etc.).
+        'lexeme_prev' and 'lexeme_next' are needed to correctly identify if 'lexeme_current' is 
+        a unary or binary operator. 'lexeme_next_on_same_line' is needed to identify function 
+        names and unary left operators.
 
         Args:
-            txt: A sequence of characters from a syntactically correct R script.
+            lexeme_prev:              The lexeme that comes directly before the current lexeme
+            lexeme_current:           The lexeme to convert to a token
+            lexeme_next:              The lexeme that comes directly after the current lexeme
+            lexeme_next_on_same_line: True if the next lexeme is on the same line, else false.
 
         Returns
-            True if txt is a valid lexeme, else false.
+            None.
         """
-        if not txt:
-            return False
-
-        """ string is not a valid lexeme if string is:
-                >1 char and ends in newline (but \r\n is a valid lexeme)
-                >1 char and ends in carriage return
-                a user-defined operator followed by another character
-                a single quoted string followed by another character
-                a double quoted string followed by another character
-                a backtick quoted string followed by another character """
-        if (re.search('.+\n$', txt) and txt != '\r\n') \
-                or re.search('.+\r$', txt) \
-                or re.search('^%%.*%%.+', txt) \
-                or re.search("^'.*'.+", txt) \
-                or re.search('^".*".+', txt) \
-                or re.search('^`.*`.+', txt):
-            return False
         
-        """ string is a valid lexeme if string is:
-                a syntactic name or reserved word
-                an operator (e.g. '+')
-                a bracket operator (e.g. '[')
-                a partial operator (e.g. ':')
-                a newline (e.g. '\n')
-                a parameter separator or end statement
-                a bracket (e.g. '{')
-                a sequence of spaces
-                a string constant (starts with a single or double quote)
-                a user-defined operator (starts with '%*')
-                a comment (starts with '#*')"""
-        if RToken.is_syntactic_name(txt) \
-                or RToken.is_operator_reserved(txt) \
-                or RToken.is_operator_brackets(txt) \
-                or txt == '<<' \
-                or RToken.is_newline(txt) \
-                or txt == ',' or txt == ';' \
-                or RToken.is_bracket(txt) \
-                or RToken.is_sequence_of_spaces(txt) \
-                or RToken.is_constant_string(txt) \
-                or RToken.is_operator_user_defined(txt) \
-                or RToken.is_comment(txt):
-            return True
+        if not lexeme_current:
+            return
 
-        """ if the string is not covered by any of the checks above, 
-                then we assume by default, that it's not a valid lexeme"""
-        return False
+        self.text: str = lexeme_current
+        self.children: List[RToken] = []
+        self.token_type: TokenType = token_type
 
-    @staticmethod
-    def is_syntactic_name(txt: str) -> bool:
-        """
-        Returns true if txt is a complete or partial valid R syntactic name or keyword, 
-        else returns false.
-        Please note that the rules for syntactic names are actually stricter than the rules used 
-        in this function, but this library assumes it is parsing valid R code.
+        if self.token_type != TokenType.INVALID:
+            return
 
-        Args:
-            txt: A sequence of characters from a syntactically correct R script.
+        if rlexeme.is_keyword(lexeme_current):
+            self.token_type = TokenType.KEY_WORD
+        elif rlexeme.is_syntactic_name(lexeme_current):
+            if lexeme_next == "(" and lexeme_next_on_same_line:
+                self.token_type = TokenType.FUNCTION_NAME
+            else:
+                self.token_type = TokenType.SYNTACTIC_NAME
+        elif rlexeme.is_comment(lexeme_current):
+            self.token_type = TokenType.COMMENT
+        elif rlexeme.is_constant_string(lexeme_current):
+            self.token_type = TokenType.CONSTANT_STRING
+        elif rlexeme.is_newline(lexeme_current):
+            self.token_type = TokenType.NEW_LINE
+        elif lexeme_current == ";":
+            self.token_type = TokenType.END_STATEMENT
+        elif lexeme_current == ",":
+            self.token_type = TokenType.SEPARATOR
+        elif rlexeme.is_sequence_of_spaces(lexeme_current):
+            # sequence of spaces (needs to be after separator check, 
+            #   else linefeed is recognised as space)
+            self.token_type = TokenType.SPACE
+        elif rlexeme.is_bracket(lexeme_current):
+            if lexeme_current == "}":
+                self.token_type = TokenType.END_SCRIPT
+            else:
+                self.token_type = TokenType.BRACKET
+        elif rlexeme.is_operator_brackets(lexeme_current):
+            self.token_type = TokenType.OPERATOR_BRACKET     # bracket operator     (e.g. '[')
+        elif rlexeme.is_operator_unary(lexeme_current) \
+                and (not lexeme_prev or not re.search('[a-zA-Z0-9_\\.)\\]]$', lexeme_prev)):
+            self.token_type = TokenType.OPERATOR_UNARY_RIGHT # unary right operator (e.g. '!x')
+        elif lexeme_current == "~" \
+                and (not lexeme_next or not lexeme_next_on_same_line \
+                     or not re.search('^[a-zA-Z0-9_\\.(\\+\\-\\!~]', lexeme_next)):
+            self.token_type = TokenType.OPERATOR_UNARY_LEFT  # unary left operator  (e.g. x~)
+        elif rlexeme.is_operator_reserved(lexeme_current) or re.search('^%%.*%%$', lexeme_current):
+            self.token_type = TokenType.OPERATOR_BINARY      # 'binary operator     (e.g. '+')
 
-        Returns
-            True if txt is a valid R syntactic name or keyword, else false.
-        """
-        return re.search('^[a-zA-Z0-9_.]+$', txt) != None \
-            or re.search('^`.*', txt) != None
+    def CloneMe(self):
+        token = RToken(self.text, token_type = self.token_type)
+        for clsTokenChild in self.children:
+            if ((clsTokenChild == None)):
+                raise Exception("Token has illegal empty child.")
+            token.children.append(clsTokenChild.CloneMe())
+        return token
+
+def get_tokens(lexemes: List[str]) -> List[RToken]:
+    tokens : List[RToken] = []
+    if not lexemes or len(lexemes) < 1:
+        return tokens
+
+    lexeme_prev: str = ""
+    lexeme_current: str = ""
+    statement_contains_element: bool = False
+
+    num_open_brackets_stack: List[int] = [] 
+    num_open_brackets_stack.append(0)
+    is_script_enclosed_by_curly_brackets_stack: List[bool] = []
+    is_script_enclosed_by_curly_brackets_stack.append(True)
+    token_state_stack: List[TokenState] = []
+    token_state_stack.append(TokenState.WAITING_FOR_START_SCRIPT)
+
+    pos = 0
+    while pos <= len(lexemes) - 1:
+
+        if len(num_open_brackets_stack) < 1:
+            raise Exception("The stack storing the number of open brackets must have at least one value.")
+        elif len(is_script_enclosed_by_curly_brackets_stack) < 1:
+            raise Exception("The stack storing the number of open curly brackets must have at least one value.")
+        elif len(token_state_stack) < 1:
+            raise Exception("The stack storing the current state of the token parsing must have at least one value.")
+
+        # store previous non-space lexeme
+        if rlexeme.is_element(lexeme_current):
+            lexeme_prev = lexeme_current
+
+        lexeme_current = lexemes[pos]
+        if not statement_contains_element:
+            statement_contains_element = rlexeme.is_element(lexeme_current)
         
-    @staticmethod
-    def is_constant_string(txt: str) -> bool:
-        """
-        Returns true if txt is a complete or partial string constant, else returns false.
-        String constants are delimited by a pair of single (') or double (") quotes and can contain
-        all other printable characters. Quotes and other special characters within strings are 
-        specified using escape sequences.
+        # find next lexeme that represents an R element
+        lexeme_next: str  = ""
+        lexeme_next_on_same_line: bool = True
+        next_pos: int = pos + 1
+        while next_pos <= len(lexemes) - 1:
+            if rlexeme.is_element(lexemes[next_pos]):
+                lexeme_next = lexemes[next_pos]
+                break
+            if lexemes[next_pos] == "\n" or lexemes[next_pos] == "\r":
+                lexeme_next_on_same_line = False
+            next_pos += 1
 
-        Args:
-            txt: A sequence of characters from a syntactically correct R script.
-
-        Returns
-            True if txt is a a complete or partial string constant, else false.
+        """ determine whether the current sequence of tokens makes a complete valid R statement
+                This is needed to determine whether a newline marks the end of the statement
+                or is just for presentation.
+                The current sequence of tokens is considered a complete valid R statement if it 
+                has no open brackets and it does not end in an operator.
         """
-        return re.search('^".*', txt) != None \
-            or re.search("^'.*", txt) != None
+        match lexeme_current:
+            case '(' | '[' | '[[':
+                num_open_brackets_stack.append(num_open_brackets_stack.pop() + 1)
+            case ')' | ']' | ']]':
+                num_open_brackets_stack.append(num_open_brackets_stack.pop() - 1)
+            case 'if' | 'while' | 'for' | 'function':
+                token_state_stack.append(TokenState.WAITING_FOR_OPEN_CONDITION)
+                num_open_brackets_stack.append(0)
+            case 'else' | 'repeat':
+                """ else' and 'repeat' keywords have no condition (e.g. 'if (x==1) y<-0 else y<-1'
+                        after the keyword is processed, the state will automatically change to WAITING_FOR_END_SCRIPT
+                """
+                token_state_stack.append(TokenState.WAITING_FOR_CLOSE_CONDITION)
+                num_open_brackets_stack.append(0)
+
+        # identify the token associated with the current lexeme and add the token to the list
+        token = RToken(lexeme_current, lexeme_prev, lexeme_next, lexeme_next_on_same_line)
+
+        """ Process key words
+                Determine whether the next end statement will also be the end of the current script.
+                Normally, a '}' indicates the end of the current script. However, R allows single
+                statement scripts, not enclosed with '{}' for selected key words. 
+                The key words that allow this are: if, else, while, for and function.
+                For example:
+                    if(x <= 0) y <- log(1+x) else y <- log(x)
+        """
+        if token.token_type == TokenType.COMMENT or token.token_type == TokenType.SPACE:
+            # ignore comments and spaces (they don't affect key word processing)
+            pass
+        else:
+            match token_state_stack[-1]:
+                case TokenState.WAITING_FOR_OPEN_CONDITION:
+                    if not token.token_type == TokenType.NEW_LINE and token.text == "(":
+                        token_state_stack.pop()
+                        token_state_stack.append(TokenState.WAITING_FOR_CLOSE_CONDITION)
+                case TokenState.WAITING_FOR_CLOSE_CONDITION:
+                    if num_open_brackets_stack[-1] == 0:
+                        token_state_stack.pop()
+                        token_state_stack.append(TokenState.WAITING_FOR_START_SCRIPT)
+                case TokenState.WAITING_FOR_START_SCRIPT:
+                    if not (token.token_type in (TokenType.COMMENT, TokenType.PRESENTATION, 
+                                                 TokenType.SPACE, TokenType.NEW_LINE)):
+                        token_state_stack.pop()
+                        token_state_stack.append(TokenState.WAITING_FOR_END_SCRIPT)
+                        if token.text == "{":
+                            # script will terminate with '}'
+                            is_script_enclosed_by_curly_brackets_stack.append(True)
+                        else:
+                            # script will terminate with end statement
+                            is_script_enclosed_by_curly_brackets_stack.append(False)
+                case TokenState.WAITING_FOR_END_SCRIPT:
+                    """ 
+                    a new line indicates the end of the statement when:
+                        - statement contains at least one R element 
+                            (i.e. not just spaces, comments, or newlines)
+                        - there are no open brackets
+                        - line doesn't end in a user-defined operator
+                        - line doesn't end in a predefined operator, 
+                            unless it's a tilda (the only operator that doesn't need a right-hand value)
+                    """
+                    if token.token_type == TokenType.NEW_LINE \
+                            and statement_contains_element \
+                            and num_open_brackets_stack[-1] == 0 \
+                            and not rlexeme.is_operator_user_defined(lexeme_prev) \
+                            and not (rlexeme.is_operator_reserved(lexeme_prev) and not lexeme_prev == "~"):
+                        token.token_type = TokenType.END_STATEMENT
+                        statement_contains_element = False
+                    if token.token_type == TokenType.END_STATEMENT and is_script_enclosed_by_curly_brackets_stack[-1] == False and not lexeme_next:
+                        token.token_type = TokenType.END_SCRIPT
+                    if token.token_type == TokenType.END_SCRIPT:
+                        is_script_enclosed_by_curly_brackets_stack.pop()
+                        num_open_brackets_stack.pop()
+                        token_state_stack.pop()
+                case _:
+                    raise Exception("The token is in an unknown state.")
         
-    @staticmethod
-    def is_comment(txt: str) -> bool:
+        tokens.append(token)
+
         """
-        Returns true if txt is a comment, else returns false.
-        Any text from a # character to the end of the line is taken to be a comment. 
-        The only exception is if the # character is inside a quoted string. This function does not
-        test for this exception. The user must test for this separately.
-
-        Args:
-            txt: A sequence of characters from a syntactically correct R script.
-
-        Returns
-            True if txt is a comment, else false.
+        If the script has ended and there are no more R elements to process, 
+        then return the token list.
+         
+        Note: Any formatting lexemes (i.e. spaces, comments or extra newlines), after the 
+        script's final statement, will not be added to the token list.
+        For example, for the script below, '#comment1' will be added to the token list but 
+        '#comment2' will not:
+              
+            a <- 1
+            b <- a * 2 #comment1
+            #comment2
+                  
+        This was a deliberate design decision. Spaces, comments or extra newlines at the end 
+        of a script serve no practical purpose and are rarely used.
+        However storing these extra formatting lexemes would increase source code complexity.
         """
-        return re.search('^#.*', txt) != None
-        
-    @staticmethod
-    def is_sequence_of_spaces(txt: str) -> bool:
-        """
-        Returns true if txt is sequence of spaces (and no other characters), else returns false.
+        if token.token_type == TokenType.END_SCRIPT and not lexeme_next:
+            return tokens
+        pos += 1
 
-        Args:
-            txt: A sequence of characters from a syntactically correct R script.
-
-        Returns
-            True if txt is sequence of spaces (and no other characters), else false.
-        """
-        return txt != '\n' and re.search('^ *$', txt) != None
-        
-    @staticmethod
-    def is_element(txt: str) -> bool:
-        """
-        Returns true if txt is a complete or partial functional R element (i.e. not empty, 
-        and not a space, comment or new line), else returns false.
-
-        Args:
-            txt: A sequence of characters from a syntactically correct R script.
-
-        Returns
-            True if txt is a complete or partial functional R element (i.e. not empty, 
-            and not a space, comment or new line), else false.
-        """
-        return not (RToken.is_newline(txt) \
-                or RToken.is_sequence_of_spaces(txt) \
-                or RToken.is_comment(txt))
-
-    @staticmethod
-    def is_operator_user_defined(txt: str) -> bool:
-        """
-        Returns true if txt is a complete or partial user-defined operator, else returns false.
-
-        Args:
-            txt: A sequence of characters from a syntactically correct R script.
-
-        Returns
-            True if txt is a complete or partial user-defined operator, else false.
-        """
-        return re.search('^%.*', txt) != None        
-
-    @staticmethod
-    def is_operator_reserved(txt: str) -> bool:
-        """
-        Returns true if txt is a resrved operator, else returns false.
-
-        Args:
-            txt: A sequence of characters from a syntactically correct R script.
-
-        Returns
-            True if txt is a resrved operator, else false.
-        """
-        return txt in ('::', ':::', '$', '@', '^', ':', '%%%%', '%%/%%', '%%*%%', '%%o%%', '%%x%%', 
-                        '%%in%%', '/', '*', '+', '-', '<', '>', '<=', '>=', '==', '!=', '!', '&', 
-                        '&&', '|', '||', '~', '->', '->>', '<-', '<<-', '=')
-        
-    @staticmethod
-    def is_operator_brackets(txt: str) -> bool:
-        """
-        Returns true if txt is a bracket operator, else returns false.
-
-        Args:
-            txt: A sequence of characters from a syntactically correct R script.
-
-        Returns
-            True if txt is a bracket operator, else false.
-        """
-        return txt in ('[', ']', '[[', ']]')
-
-    @staticmethod
-    def is_operator_unary(txt: str) -> bool:
-        """
-        Returns true if txt is a unary operator, else returns false.
-
-        Args:
-            txt: A sequence of characters from a syntactically correct R script.
-
-        Returns
-            True if txt is a unary operator, else false.
-        """
-        return txt in ('+', '-', '!', '~')
-
-    @staticmethod
-    def is_bracket(txt: str) -> bool:
-        """
-        Returns true if txt is a bracket, else returns false.
-
-        Args:
-            txt: A sequence of characters from a syntactically correct R script.
-
-        Returns
-            True if txt is a bracket, else false.
-        """
-        return txt in ('(', ')', '{', '}')
-
-    @staticmethod
-    def is_newline(txt: str) -> bool:
-        """
-        Returns true if txt is a newline, else returns false.
-
-        Args:
-            txt: A sequence of characters from a syntactically correct R script.
-
-        Returns
-            True if txt is a newline, else false.
-        """
-        return txt in ('\r', '\n', '\r\n')
-
-    @staticmethod
-    def is_keyword(txt: str) -> bool:
-        """
-        Returns true if txt is a keyword, else returns false.
-
-        Args:
-            txt: A sequence of characters from a syntactically correct R script.
-
-        Returns
-            True if txt is a keyword, else false.
-        """
-        return txt in ('if', 'else', 'repeat', 'while', 'function', 'for', 'in', 'next', 'break')
+    return tokens
