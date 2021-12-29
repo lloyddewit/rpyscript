@@ -1,3 +1,4 @@
+import re
 from typing import List, Dict, Tuple
 from relement import RElement
 from rtoken import RToken, TokenType
@@ -91,12 +92,30 @@ class RStatement(object):
             pos += 1
         return tokens_new
 
-    def get_tokens_operator_group(self, tokens: List[RToken], pos: int):
+    def _get_next_token(self, tokens: List[RToken], pos_tokens: int) -> RToken:
+        if pos_tokens >= len(tokens) - 1:
+            raise Exception("Token list ended unexpectedly.")
+        return tokens[pos_tokens + 1].clone_me()
+
+    def get_tokens_operator_group(self, tokens: List[RToken], pos_operators: int) -> List[RToken]:
         if len(tokens) < 1:
             return List[RToken]()
 
+        _OPERATORS_BRACKETS: int = 2
+        _OPERATORS_UNARY_ONLY: int = 4
+        _OPERATORS_USER_DEFINED: int = 6
+        _OPERATORS_TILDA: int = 13
+        _OPERATORS_RIGHT_ASSIGNMENT: int = 14
+        _OPERATORS_LEFT_ASSIGNMENT1: int = 15
+        _OPERATORS_LEFT_ASSIGNMENT2: int = 16
+
+        _OPERATOR_PRECEDENCES = (('::', ':::'), ('$', '@'), ('[', '[['), ('^'), ('-', '+'), (':'), \
+                                ('%'), ('*', '/'), ('+', '-'), ('<>', '<=', '>=', '==', '!='), \
+                                ('!'), ('&', '&&'), ('|', '||'), ('~'), ('->', '->>'), \
+                                ('<-', '<<-'), ('='))
+
         tokens_new: List[RToken] = List[RToken]()
-        token_prev: RToken
+        token_prev: RToken | None = None
         prev_token_processed: bool = False
 
         pos_tokens: int = 0
@@ -110,61 +129,82 @@ class RStatement(object):
                        same precedence group as the parent but was processed first in accordance 
                        with the left to right rule (e.g. 'a/b*c').
             """
-            if ((((self.operator_precedences[pos].Contains(token.text) or ((((pos == intOperatorsUserDefined)) and Regex.IsMatch(token.text, "^%.*%$"))))) and ((((token.lstlen(tokens) == 0)) or ((((token.lstlen(tokens) == 1)) and ((token.lstTokens[0].enuToken == RToken.typToken.RPresentation)))))))):
-                if ((token.enuToken == RToken.typToken.ROperatorBracket)):
-                    if ((pos != intOperatorsBrackets)):
-                    token.lstTokens.Add(token_prev.clone_me())
-                    prev_token_processed = True
-                    pos_tokens += 1
-                    if ((token.text == "[")):
-                        "]"
-                        "]]"
-                        iNumOpenBrackets = 1
-                        while ((pos_tokens < len(tokens))):
-                            ((tokens[pos_tokens].text == token.text))
-                            1
-                            0
-                            ((tokens[pos_tokens].text == strCloseBracket))
-                            1
-                            0
-                            if ((iNumOpenBrackets == 0)):
-                            token.lstTokens.Add(tokens[pos_tokens].clone_me())
-                            pos_tokens += 1
-                        RToken.typToken.ROperatorBinary
-                        if ((pos == intOperatorsUnaryOnly)):
-                        elif ((clsTokenPrev == None)):
-                            raise System.Exception("The binary operator has no parameter on its left.")
-                        token.lstTokens.Add(token_prev.clone_me())
+            if (token.text in _OPERATOR_PRECEDENCES[pos_operators] or \
+                    pos_operators == _OPERATORS_USER_DEFINED and re.search('^^%%.*%%$', token.text))  and \
+                    (len(token.children) == 0 or \
+                    (len(token.children) == 1 and token.children[0].token_type == TokenType.PRESENTATION)):
+                match token.token_type:
+                    case TokenType.OPERATOR_BRACKET if pos_operators == _OPERATORS_BRACKETS:
+                        if not token_prev:
+                            raise Exception('The bracket operator has no token on its left.')
+                        
+                        # make the previous and next tokens (up to the corresponding close bracket)
+                        #   the children of the current token
+                        token.children.append(token_prev.clone_me())
                         prev_token_processed = True
-                        token.lstTokens.Add(GetNextToken(tokens, pos_tokens))
                         pos_tokens += 1
-                        while ((pos_tokens < ((len(tokens) - 1)))):
-                            clsTokenNext = GetNextToken(tokens, pos_tokens)
-                            if (((not ((token.enuToken == clsTokenNext.enuToken))) or (not ((token.text == clsTokenNext.text))))):
+                        close_bracket: str = ']' if token.text == '[' else 
+                        num_open_brackets = 1
+                        while pos_tokens < len(tokens):
+                            num_open_brackets += 1 if tokens[pos_tokens].text == token.text else 0
+                            num_open_brackets -= 1 if tokens[pos_tokens].text == close_bracket else 0
+                            if num_open_brackets == 0:
+                                break # discard the terminating close bracket
+                            token.children.append(tokens[pos_tokens].clone_me())
                             pos_tokens += 1
-                            token.lstTokens.Add(GetNextToken(tokens, pos_tokens))
-                            pos_tokens += 1
-                        RToken.typToken.ROperatorUnaryRight
-                        if ((arrOperatorPrecedence(intOperatorsUnaryOnly).Contains(token.text) and (not ((pos == intOperatorsUnaryOnly))))):
-                        token.lstTokens.Add(GetNextToken(tokens, pos_tokens))
-                        pos_tokens += 1
-                        RToken.typToken.ROperatorUnaryLeft
-                        if ((((token_prev == None)) or (not ((pos == intOperatorsTilda))))):
-                            raise System.Exception("Illegal unary left operator (\'~\' is the only valid unary left operator).")
-                        token.lstTokens.Add(token_prev.clone_me())
+
+                    # edge case: if we are looking for unary '+' or '-' and we found a binary '+' or '-',
+                    #   then do not process (binary '+' and '-' have a lower precedence and will be processed later)
+                    case TokenType.OPERATOR_BINARY if pos_operators != _OPERATORS_UNARY_ONLY:
+                        if not token_prev:
+                            raise Exception('The binary operator has no token on its left.')
+
+                        # make the previous and next tokens, the children of the current token
+                        token.children.append(token_prev.clone_me())
                         prev_token_processed = True
-                    else:
-                        raise System.Exception("The token has an unknown operator type.")
-            if (not prev_token_processed):
-                if (not ((token_prev == None))):
-                    tokens_new.Add(token_prev)
-            token.lstTokens = GetLstTokenOperatorGroup(token.clone_me().lstTokens, pos)
+                        token.children.append(self._get_next_token(tokens, pos_tokens))
+                        pos_tokens += 1
+
+                        # while next token is the same operator (e.g. 'a+b+c+d...'), 
+                        #   then keep making the next token, the child of the current operator token
+                        while pos_tokens < len(tokens) - 1:
+                            token_next: RToken | None = self._get_next_token(tokens, pos_tokens)
+                            if token.token_type != token_next.token_type or token.text != token_next.text):
+                                break
+                            pos_tokens += 1
+                            token.children.append(self._get_next_token(tokens, pos_tokens))
+                            pos_tokens += 1
+
+                    # edge case: if we found a unary '+' or '-', but we are not currently processing the unary '+'and '-' operators
+                    case TokenType.OPERATOR_UNARY_RIGHT if not token.text in _OPERATOR_PRECEDENCES[_OPERATORS_UNARY_ONLY] or pos_operators == _OPERATORS_UNARY_ONLY:
+                        # make the next token, the child of the current operator token
+                        token.children.append(self._get_next_token(tokens, pos_tokens))
+                        pos_tokens += 1
+
+                    case TokenType.OPERATOR_UNARY_LEFT:
+                        if token_prev == None or pos_operators != _OPERATORS_TILDA:
+                            raise Exception("Illegal unary left operator ('~' is the only valid unary left operator).")
+                        
+                        # make the previous token, the child of the current operator token
+                        token.children.append(token_prev.clone_me())
+                        prev_token_processed = True
+
+            # if token was not the operator we were looking for
+            #   (or we were looking for a unary right operator)
+            if not prev_token_processed and token_prev:
+                # add the previous token to the tree
+                tokens_new.append(token_prev)
+
+            # process the current token's children
+            token.children = self.get_tokens_operator_group(token.clone_me().children, pos_operators)
+
             token_prev = token.clone_me()
             prev_token_processed = False
             pos_tokens += 1
-        if ((token_prev == None)):
-            raise System.Exception("Expected that there would still be a token to add to the tree.")
-        tokens_new.Add(token_prev.clone_me())
+
+        if token_prev == None:
+            raise Exception("Expected that there would still be a token to add to the tree.")
+        tokens_new.append(token_prev.clone_me())
         return tokens_new
 
     def get_tokens_operators(self, tokens: List[RToken]) -> List[RToken]:
@@ -173,7 +213,7 @@ class RStatement(object):
 
         tokens_new: List[RToken] = List[RToken]()
         pos: int = 0
-        while pos < len(self.operator_precedences):
+        while pos < len(_OPERATOR_PRECEDENCES):
             # restructure the tree for the next group of operators in the precedence list
             tokens_new = get_tokens_operator_group(tokens, pos)
 
@@ -194,19 +234,6 @@ class RStatement(object):
         self.suffix: str = ""
         self.assignment: RElement
         self.element: RElement
-
-        self._OPERATORS_BRACKETS: int = 2
-        self._OPERATORS_UNARY_ONLY: int = 4
-        self._OPERATORS_USER_DEFINED: int = 6
-        self._OPERATORS_TILDA: int = 13
-        self._OPERATORS_RIGHT_ASSIGNMENT: int = 14
-        self._OPERATORS_LEFT_ASSIGNMENT1: int = 15
-        self._OPERATORS_LEFT_ASSIGNMENT2: int = 16
-
-        self.operator_precedences = (('::', ':::'), ('$', '@'), ('[', '[['), ('^'), ('-', '+'), (':'), \
-                                ('%'), ('*', '/'), ('+', '-'), ('<>', '<=', '>=', '==', '!='), \
-                                ('!'), ('&', '&&'), ('|', '||'), ('~'), ('->', '->>'), \
-                                ('<-', '<<-'), ('='))
 
         statement_tokens: List[RToken] = []
         while pos < len(tokens):
@@ -230,10 +257,10 @@ class RStatement(object):
             token_child_left = tokens_tree[0].children[len(tokens_tree[0].children) - 2]
             token_child_right = tokens_tree[0].children[len(tokens_tree[0].children) - 1]
 
-            if tokens_tree[0].text in self.operator_precedences[self._OPERATORS_LEFT_ASSIGNMENT1] or tokens_tree[0].text in self.operator_precedences[self._OPERATORS_LEFT_ASSIGNMENT2]:
+            if tokens_tree[0].text in _OPERATOR_PRECEDENCES[_OPERATORS_LEFT_ASSIGNMENT1] or tokens_tree[0].text in _OPERATOR_PRECEDENCES[_OPERATORS_LEFT_ASSIGNMENT2]:
                 self.assignment = get_element(token_child_left, assignments)
                 self.element = get_element(token_child_right, assignments)
-            elif tokens_tree[0].text in self.operator_precedences[self._OPERATORS_RIGHT_ASSIGNMENT]:
+            elif tokens_tree[0].text in _OPERATOR_PRECEDENCES[_OPERATORS_RIGHT_ASSIGNMENT]:
                 self.assignment = get_element(token_child_right, assignments)
                 self.element = get_element(token_child_left, assignments)
 
@@ -253,16 +280,16 @@ class RStatement(object):
 
     def get_as_executable_script(self) -> str:
         text: str = ""
-
         text_element: str = get_script_element(self.element)
         if not self.assignment or not self.assignment_operator:
             text = text_element
         else:
             text_assignment = get_script_element(self.assignment)
-            if self.assignment_operator in self.operator_precedences[self._OPERATORS_LEFT_ASSIGNMENT1] or self.assignment_operator in self.operator_precedences[self._OPERATORS_LEFT_ASSIGNMENT2]:
-                text = ((text_assignment + ((self.assignment_prefix + ((self.assignment_operator + text_element))))))
-            elif self.assignment_operator in self.operator_precedences[self._OPERATORS_RIGHT_ASSIGNMENT]:
-                text = ((text_element + ((self.assignment_prefix + ((self.assignment_operator + text_assignment))))))
+            if self.assignment_operator in _OPERATOR_PRECEDENCES[_OPERATORS_LEFT_ASSIGNMENT1] or \
+                    self.assignment_operator in _OPERATOR_PRECEDENCES[_OPERATORS_LEFT_ASSIGNMENT2]:
+                text = text_assignment + self.assignment_prefix + self.assignment_operator + text_element
+            elif self.assignment_operator in _OPERATOR_PRECEDENCES[_OPERATORS_RIGHT_ASSIGNMENT]:
+                text = text_element + self.assignment_prefix + self.assignment_operator + text_assignment
             else:
                 raise Exception("The statement's assignment operator is an unknown type.")
         
