@@ -52,25 +52,16 @@ class RScript(object):
 
         self.tokens: List[RToken] = []
         self.statements: List[RStatement] = []        
-        pos = 0
+        pos: int = 0
         assignments: Dict[str, RStatement] = {}
-"""         while pos < len(self.tokens):
-            clsStatement: clsRStatement = RStatement(self.tokens, pos, assignments)
-            self.statements.append(clsStatement)
-            if (not ((clsStatement.clsAssignment == None))):
-                if assignments.ContainsKey(clsStatement.clsAssignment.strTxt):
-                    assignments(clsStatement.clsAssignment.strTxt) = clsStatement
-                else:
-                    assignments.Add(clsStatement.clsAssignment.strTxt, clsStatement)
+        while pos < len(self.tokens):
+            statement: RStatement = RStatement(self.tokens, pos, assignments)
+            self.statements.append(statement)
+            if statement.assignment:
+                assignments[statement.assignment.text] = statement
      
-    def GetAsExecutableScript(self):
-        strTxt = ""
-        for clsStatement in self.statements:
-            clsStatement.GetAsExecutableScript()
-        return strTxt
-"""
-
-
-    
-
-
+    def get_as_executable_script(self) -> str:
+        text = ""
+        for statement in self.statements:
+            text += statement.get_as_executable_script()
+        return text

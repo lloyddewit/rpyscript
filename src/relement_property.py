@@ -13,7 +13,7 @@ class RElementProperty(RElementAssignable):
         self.objects: List[RElement] = objects  
     
     def get_token_clean(self, token: RToken, objects: List[RElement], package_name: str = "") -> RToken:
-        clsTokenNew = token.CloneMe()
+        clsTokenNew = token.clone_me()
         # Edge case: if the object has a package name or an object list, and formatting information
         if (package_name or len(objects) >0) and (len(token.children) > 0 and token.children[0].token_type == TokenType.PRESENTATION):
             """
