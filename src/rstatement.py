@@ -1,11 +1,12 @@
 import re
 from typing import List, Dict, Tuple
-from relement import RElement
-from relement_function import RElementFunction
-from relement_operator import RElementOperator
 from rparameter import RParameter
 from rtoken import RToken, TokenType
-import rtoken
+from relement import RElement
+from relement_assignable import RElementAssignable
+from relement_property import RElementProperty
+from relement_function import RElementFunction
+from relement_operator import RElementOperator
 
 
 class RStatement(object):
@@ -24,10 +25,7 @@ class RStatement(object):
                             ('<-', '<<-'), ('='))
 
     def _get_tokens_presentation(self, tokens: List[RToken], pos: int) -> List[RToken]:
-        if len(tokens) < 1:
-            return List[RToken]()
-
-        tokens_new: List[RToken] = List[RToken]()
+        tokens_new: List[RToken] = []
         prefix = ''
         while pos < len(tokens):
             token: RToken = tokens[pos]
@@ -45,32 +43,27 @@ class RStatement(object):
             tokens_new.append(token)
         return tokens_new
 
-    def _get_tokens_brackets(self, tokens: List[RToken], pos: int) -> List[RToken]:
-        if len(tokens) < 1:
-            return List[RToken]()
-
-        tokens_new: List[RToken] = List[RToken]()
+    def _get_tokens_brackets(self, tokens: List[RToken], pos: int) -> tuple[List[RToken], int]:
+        tokens_new: List[RToken] = []
         while pos < len(tokens):
             token: RToken = tokens[pos]
             pos += 1
             match token.text:
                 case '(':
-                    tokens_temp: List[RToken] = self._get_tokens_brackets(tokens, pos)
+                    tokens_temp: List[RToken]
+                    tokens_temp, pos = self._get_tokens_brackets(tokens, pos)
                     for token_child in tokens_temp:
                         if not token_child:
                             raise Exception('Token has illegal empty child.')
                         token.children.append(token_child.clone_me())
                 case ')':
                     tokens_new.append(token.clone_me())
-                    return tokens_new
+                    return tokens_new, pos
             tokens_new.append(token.clone_me())
-        return tokens_new
+        return tokens_new, pos
     
     def _get_tokens_function_brackets(self, tokens: List[RToken]) -> List[RToken]:
-        if len(tokens) < 1:
-            return List[RToken]()
-
-        tokens_new: List[RToken] = List[RToken]()
+        tokens_new: List[RToken] = []
         pos: int = 0
         while pos < len(tokens):
             token: RToken = tokens[pos]
@@ -80,16 +73,13 @@ class RStatement(object):
                 # make the function's open bracket a child of the function name
                 pos += 1
                 token.children.append(tokens[pos].clone_me())
-            tokens = self._get_tokens_function_brackets(token.clone_me().children)
-            tokens.append(token.clone_me())
+            token.children = self._get_tokens_function_brackets(token.clone_me().children)
+            tokens_new.append(token.clone_me())
             pos += 1
         return tokens_new
 
     def _get_tokens_commas(self, tokens: List[RToken], pos: int, processing_comma: bool = False) -> List[RToken]:
-        if len(tokens) < 1:
-            return List[RToken]()
-
-        tokens_new: List[RToken] = List[RToken]()
+        tokens_new: List[RToken] = []
         while pos < len(tokens):
             token: RToken = tokens[pos]
             match token.text:
@@ -115,10 +105,10 @@ class RStatement(object):
         return tokens[pos_tokens + 1].clone_me()
 
     def _get_tokens_operator_group(self, tokens: List[RToken], pos_operators: int) -> List[RToken]:
+        tokens_new: List[RToken] = []
         if len(tokens) < 1:
-            return List[RToken]()
+            return tokens_new
 
-        tokens_new: List[RToken] = List[RToken]()
         token_prev: RToken | None = None
         prev_token_processed: bool = False
 
@@ -212,17 +202,14 @@ class RStatement(object):
         return tokens_new
 
     def _get_tokens_operators(self, tokens: List[RToken]) -> List[RToken]:
-        if len(tokens) < 1:
-            return List[RToken]()
-
-        tokens_new: List[RToken] = List[RToken]()
+        tokens_new: List[RToken] = []
         pos: int = 0
         while pos < len(RStatement._OPERATOR_PRECEDENCES):
             # restructure the tree for the next group of operators in the precedence list
             tokens_new = self._get_tokens_operator_group(tokens, pos)
 
             # clone the new tree before restructuring for the next operator
-            tokens = List[RToken]()
+            tokens = []
             for token_temp in tokens_new:
                 tokens.append(token_temp.clone_me())
             pos += 1
@@ -239,7 +226,7 @@ class RStatement(object):
                 return child
         raise Exception("Token must contain at least one non-presentation child.")
 
-    def _get_parameter_named(self, token: RToken, assignments: Dict[str, RStatement]) -> RParameter | None:
+    def _get_parameter_named(self, token: RToken, assignments: Dict[str, 'RStatement']) -> RParameter | None:
         if not token:
             raise Exception('Cannot create a named parameter from an empty token.')
 
@@ -279,8 +266,31 @@ class RStatement(object):
                         if len(token.children) > 0 and token.children[0].token_type == TokenType.PRESENTATION \
                         else ''
                 return parameter_named
+    
+    def _get_parameter(self, token: RToken, assignments: Dict[str, 'RStatement']) -> RParameter:
+        if not token:
+            raise Exception("Cannot create a parameter from an empty token.")
+        parameter: RParameter = RParameter()        
+        parameter.arg_val = self._get_element(token, assignments)
+        parameter.prefix = token.children[0].text if len(token.children) > 0 and token.children[0].token_type == TokenType.PRESENTATION else ''
+        return parameter
 
-    def _get_element(self, token: RToken, assignments: Dict[str, RStatement], \
+    def _get_token_package_name(self, token: RToken) -> RToken:
+        if not token:
+            raise Exception('Cannot return a package name from an empty token.')
+        if len(token.children) < 2 or len(token.children) > 3:
+            raise Exception(f"The package operator '::' has {len(token.children)} parameters. " + \
+                    "It must have 2 parameters (plus an optional presentation parameter).")
+        return token.children[len(token.children) - 2]
+
+    def _get_package_prefix(self, token: RToken) -> str:
+        if not token:
+            raise Exception('Cannot return a package prefix from an empty token.')
+        token_package_name: RToken = self._get_token_package_name(token)
+        return token_package_name.children[0].text if len(token_package_name.children) > 0 \
+                    and token_package_name.children[0].token_type == TokenType.PRESENTATION else ''
+
+    def _get_element(self, token: RToken, assignments: Dict[str, 'RStatement'], \
             bracketed_new: bool = False, package_name: str = '', \
             package_prefix: str = '', objects: List[RElement] | None = None) -> RElement | None:
         
@@ -352,11 +362,11 @@ class RStatement(object):
                     raise Exception(f'Unary right operator token has {len(token.children)} children. ' + \
                             'A Unary right operator must have 1 child (plus an optional presentation child).')
                 
-                operator: RElementOperator(token, bracketed_new, True)
+                operator: RElementOperator = RElementOperator(token, bracketed_new, True)
                 operator.parameters.append(self._get_parameter(token.children[len(token.children) - 1], assignments))
                 return operator
 
-            case TokenType.OPERATOR_BINARY, TokenType.OPERATOR_BRACKET:
+            case TokenType.OPERATOR_BINARY | TokenType.OPERATOR_BRACKET:
                 if len(token.children) < 2:
                     raise Exception(f'Binary operator token has {len(token.children)} children. ' + \
                             'A binary operator must have at least 2 children (plus an optional presentation child).')
@@ -383,10 +393,16 @@ class RStatement(object):
                                 package_name_new = self._get_token_package_name(token_object).text
                                 package_prefix_new = self._get_package_prefix(token_object)
                                 # get the object associated with the package, and add it to the object list
-                                objects_new.append(self._get_element(
-                                        token_object.children[len(token_object.children) - 1], assignments))
+                                element: RElement | None = self._get_element( 
+                                        token_object.children[len(token_object.children) - 1], assignments)
+                                if not element:
+                                    raise Exception('Unexpected null RElement object returned.')
+                                objects_new.append(element)
                                 continue
-                            objects_new.append(self._get_element(token_object, assignments))
+                            element: RElement | None = self._get_element(token_object, assignments)
+                            if not element:
+                                raise Exception('Unexpected null RElement object returned.')
+                            objects_new.append(element)
                         
                         # the last item in the parameter list is the element we need to return
                         return self._get_element(token.children[len(token.children) - 1],
@@ -405,7 +421,7 @@ class RStatement(object):
 
                     case _: # else if not an object or package operator, then add each parameter to the operator
                         operator: RElementOperator = RElementOperator(token, bracketed_new)
-                        start_pos: int = 1 if token.children[0].token_type = TokenType.PRESENTATION else 0
+                        start_pos: int = 1 if token.children[0].token_type == TokenType.PRESENTATION else 0
                         pos: int = start_pos 
                         while pos <= len(token.children) - 1:
                             operator.parameters.append(self._get_parameter(token.children[pos], assignments))
@@ -416,7 +432,7 @@ class RStatement(object):
             case TokenType.SYNTACTIC_NAME | TokenType.CONSTANT_STRING:
                 # if element has a package name or object list, then return a property element
                 if package_name or objects:
-                    return RElementProperty(token, bracketed_new, package_name, package_prefix, objects)                
+                    return RElementProperty(token, objects, bracketed_new, package_name, package_prefix)                
 
                 # if element was assigned in a previous statement, then return an assigned element
                 statement: RStatement | None = assignments.get(token.text)
@@ -426,23 +442,24 @@ class RStatement(object):
                 # else just return a regular element
                 return RElement(token, bracketed_new)
 
-            case TokenType.PRESENTATION, TokenType.END_STATEMENT:
+            case TokenType.PRESENTATION | TokenType.END_STATEMENT:
                 # if token can't be used to generate an R element then ignore
                 return None
 
             case _:
                 raise Exception('The token has an unexpected type.')
 
-    def __init__(self, tokens: List[RToken], pos: int, assignments: Dict[str, RStatement]) -> None:
-        if len(tokens) < 1:
-            return
-
+    def __init__(self) -> None:
         self.is_terminated_with_newline: bool = True
         self.assignment_operator: str = ''
         self.assignment_prefix: str = ''
         self.suffix: str = ''
         self.assignment: RElement | None = None
         self.element: RElement | None = None
+
+    def set_from_tokens(self, tokens: List[RToken], pos: int, assignments: Dict[str, 'RStatement']) -> int:
+        if len(tokens) < 1:
+            return pos
 
         statement_tokens: List[RToken] = []
         while pos < len(tokens):
@@ -453,7 +470,8 @@ class RStatement(object):
             pos += 1
         
         tokens_presentation: List[RToken] = self._get_tokens_presentation(statement_tokens, 0)
-        tokens_brackets: List[RToken] = self._get_tokens_brackets(tokens_presentation, 0)
+        tokens_brackets: List[RToken]
+        tokens_brackets, _ = self._get_tokens_brackets(tokens_presentation, 0)
         tokens_function_brackets: List[RToken] = self._get_tokens_function_brackets(tokens_brackets)
         tokens_commas: List[RToken] = self._get_tokens_commas(tokens_function_brackets, 0)
         tokens_tree: List[RToken] = self._get_tokens_operators(tokens_commas)
@@ -486,14 +504,72 @@ class RStatement(object):
 
         if self.element == None and len(token_end_statement.children) > 0 and token_end_statement.children[0].token_type == TokenType.PRESENTATION:
             self.suffix = token_end_statement.children[0].text
+        return pos
+
+    def _get_script_element_property(self, element: RElementProperty) -> str:
+        script: str = element.prefix + (element.package_name + '::') if element.package_name else ''
+        if element.objects:
+            for object in element.objects:
+                script += self._get_script_element(object) + '$'
+            
+        script += element.text
+        return script
+
+    def _get_script_element(self, element) -> str:
+        # TODO remove imports?
+        from relement import RElement
+        from relement_assignable import RElementAssignable
+        from relement_property import RElementProperty
+        from relement_function import RElementFunction
+        from relement_operator import RElementOperator
+        if not isinstance(element, RElement):
+            raise Exception("Expected 'element' parameter type to be an 'Element' class, or one of the 'Element' child classes.")
+
+        script: str = '(' if element.is_bracketed else ''
+        from relement_function import RElementFunction
+
+        if isinstance(element, RElementFunction):
+            script += self._get_script_element_property(element)
+            script += '('
+            if element.parameters:
+                has_prefix_comma: bool = False
+                for parameter in element.parameters:
+                    script += ', ' if has_prefix_comma else ''
+                    has_prefix_comma = True
+                    script += (parameter.prefix + parameter.arg_name + ' =') if parameter.arg_name else ''
+                    script += self._get_script_element(parameter.arg_val)
+            script += ')'
+        elif isinstance(element, RElementProperty):
+            script += self._get_script_element_property(element)
+        elif isinstance(element, RElementOperator):
+            prefix_operator: bool = element.first_param_on_right
+            for parameter in element.parameters:
+                script += (element.prefix + element.text) if prefix_operator else ''
+                prefix_operator = True
+                script += self._get_script_element(parameter.arg_val)
+
+            match element.text:
+                case '[':
+                    script += ']'
+                case '[[':
+                    script += ']]'
+                case _:
+                    script += (element.prefix + element.text) if len(element.parameters) == 1 and not element.first_param_on_right else ''
+
+        #case type(RElementKeyWord): 'TODO add key word functionality
+        elif isinstance(element, RElementAssignable) or isinstance(element, RElement):
+            script += element.prefix + element.text
+        
+        script += ')' if element.is_bracketed else ''
+        return script
 
     def get_as_executable_script(self) -> str:
         text: str = ''
-        text_element: str = get_script_element(self.element)
+        text_element: str = self._get_script_element(self.element)
         if not self.assignment or not self.assignment_operator:
             text = text_element
         else:
-            text_assignment = get_script_element(self.assignment)
+            text_assignment = self._get_script_element(self.assignment)
             if self.assignment_operator in RStatement._OPERATOR_PRECEDENCES[RStatement._OPERATORS_LEFT_ASSIGNMENT1] or \
                     self.assignment_operator in RStatement._OPERATOR_PRECEDENCES[RStatement._OPERATORS_LEFT_ASSIGNMENT2]:
                 text = text_assignment + self.assignment_prefix + self.assignment_operator + text_element

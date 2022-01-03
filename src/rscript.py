@@ -31,7 +31,8 @@ examples.
 """
 
 from typing import Dict, List
-from rtoken import RToken
+import rlexeme
+import rtoken
 from rstatement import RStatement
 
 
@@ -50,12 +51,13 @@ class RScript(object):
         if not script_str:
             return
 
-        self.tokens: List[RToken] = []
+        self.tokens: List[rtoken.RToken] = rtoken.get_tokens(rlexeme.get_lexemes(script_str))
         self.statements: List[RStatement] = []        
         pos: int = 0
         assignments: Dict[str, RStatement] = {}
         while pos < len(self.tokens):
-            statement: RStatement = RStatement(self.tokens, pos, assignments)
+            statement: RStatement = RStatement()
+            pos = statement.set_from_tokens(self.tokens, pos, assignments)
             self.statements.append(statement)
             if statement.assignment:
                 assignments[statement.assignment.text] = statement

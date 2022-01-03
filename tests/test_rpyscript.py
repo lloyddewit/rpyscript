@@ -1,6 +1,7 @@
 from typing import List
 import rlexeme
 import rtoken
+import rscript
 
 def test_get_lexemes():
 
@@ -366,5 +367,7 @@ def test_get_lst_tokens():
 
 def test_get_as_executable_script():
     # RSyntacticName
-    input_string = ''
+    input_string = 'a+b\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
 
