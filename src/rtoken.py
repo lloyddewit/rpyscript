@@ -91,9 +91,6 @@ class RToken(object):
             None.
         """
         
-        if not lexeme_current:
-            return
-
         self.text: str = lexeme_current
         self.children: List[RToken] = []
         self.token_type: TokenType = token_type

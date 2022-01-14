@@ -24,9 +24,10 @@ class RStatement(object):
                             ('!'), ('&', '&&'), ('|', '||'), ('~'), ('->', '->>'), \
                             ('<-', '<<-'), ('='))
 
-    def _get_tokens_presentation(self, tokens: List[RToken], pos: int) -> List[RToken]:
+    def _get_tokens_presentation(self, tokens: List[RToken]) -> List[RToken]:
         tokens_new: List[RToken] = []
-        prefix = ''
+        pos:int = 0
+        prefix:str  = ''
         while pos < len(tokens):
             token: RToken = tokens[pos]
             pos += 1
@@ -78,7 +79,7 @@ class RStatement(object):
             pos += 1
         return tokens_new
 
-    def _get_tokens_commas(self, tokens: List[RToken], pos: int, processing_comma: bool = False) -> List[RToken]:
+    def _get_tokens_commas(self, tokens: List[RToken], pos: int, processing_comma: bool = False) -> tuple[List[RToken], int]:
         tokens_new: List[RToken] = []
         while pos < len(tokens):
             token: RToken = tokens[pos]
@@ -86,18 +87,20 @@ class RStatement(object):
                 case ',':
                     if processing_comma:
                         pos -= 1 #ensure this comma is processed in the level above
-                        return tokens_new
+                        return tokens_new, pos
                     pos += 1
-                    token.children += self._get_tokens_commas(tokens, pos, True)
+                    children, pos = self._get_tokens_commas(tokens, pos, True)
+                    token.children += children
                 case ')':
                     tokens.append(token)
-                    return tokens_new
+                    return tokens_new, pos
                 case _:
                     if len(token.children) > 0:
-                        token.children = self._get_tokens_commas(token.clone_me().children, 0)
+                        children, _ = self._get_tokens_commas(token.clone_me().children, 0)
+                        token.children = children
             tokens_new.append(token)
             pos += 1
-        return tokens_new
+        return tokens_new, pos
 
     def _get_next_token(self, tokens: List[RToken], pos_tokens: int) -> RToken:
         if pos_tokens >= len(tokens) - 1:
@@ -469,11 +472,12 @@ class RStatement(object):
                 break
             pos += 1
         
-        tokens_presentation: List[RToken] = self._get_tokens_presentation(statement_tokens, 0)
+        tokens_presentation: List[RToken] = self._get_tokens_presentation(statement_tokens)
         tokens_brackets: List[RToken]
         tokens_brackets, _ = self._get_tokens_brackets(tokens_presentation, 0)
         tokens_function_brackets: List[RToken] = self._get_tokens_function_brackets(tokens_brackets)
-        tokens_commas: List[RToken] = self._get_tokens_commas(tokens_function_brackets, 0)
+        tokens_commas: List[RToken]
+        tokens_commas, _ = self._get_tokens_commas(tokens_function_brackets, 0)
         tokens_tree: List[RToken] = self._get_tokens_operators(tokens_commas)
 
         if len(tokens_tree) < 1:
@@ -502,12 +506,13 @@ class RStatement(object):
         if token_end_statement.token_type == TokenType.END_STATEMENT and token_end_statement.text == ';':
             self.is_terminated_with_newline = False
 
-        if self.element == None and len(token_end_statement.children) > 0 and token_end_statement.children[0].token_type == TokenType.PRESENTATION:
+        if self.element and len(token_end_statement.children) > 0 and token_end_statement.children[0].token_type == TokenType.PRESENTATION:
             self.suffix = token_end_statement.children[0].text
         return pos
 
     def _get_script_element_property(self, element: RElementProperty) -> str:
-        script: str = element.prefix + (element.package_name + '::') if element.package_name else ''
+        script: str = element.prefix
+        script += (element.package_name + '::') if element.package_name else ''
         if element.objects:
             for object in element.objects:
                 script += self._get_script_element(object) + '$'
@@ -522,6 +527,10 @@ class RStatement(object):
         from relement_property import RElementProperty
         from relement_function import RElementFunction
         from relement_operator import RElementOperator
+
+        if not element:
+            return ""
+
         if not isinstance(element, RElement):
             raise Exception("Expected 'element' parameter type to be an 'Element' class, or one of the 'Element' child classes.")
 
@@ -534,7 +543,7 @@ class RStatement(object):
             if element.parameters:
                 has_prefix_comma: bool = False
                 for parameter in element.parameters:
-                    script += ', ' if has_prefix_comma else ''
+                    script += ',' if has_prefix_comma else ''
                     has_prefix_comma = True
                     script += (parameter.prefix + parameter.arg_name + ' =') if parameter.arg_name else ''
                     script += self._get_script_element(parameter.arg_val)

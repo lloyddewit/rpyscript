@@ -48,22 +48,24 @@ class RScript(object):
     """
 
     def __init__(self, script_str: str) -> None:
+        self.tokens: List[rtoken.RToken] = []
+        self.statements: List[RStatement] = []        
+        self.assignments: Dict[str, RStatement] = {}
+
         if not script_str:
             return
 
         self.tokens: List[rtoken.RToken] = rtoken.get_tokens(rlexeme.get_lexemes(script_str))
-        self.statements: List[RStatement] = []        
         pos: int = 0
-        assignments: Dict[str, RStatement] = {}
         while pos < len(self.tokens):
             statement: RStatement = RStatement()
-            pos = statement.set_from_tokens(self.tokens, pos, assignments)
+            pos = statement.set_from_tokens(self.tokens, pos, self.assignments)
             self.statements.append(statement)
             if statement.assignment:
-                assignments[statement.assignment.text] = statement
+                self.assignments[statement.assignment.text] = statement
      
     def get_as_executable_script(self) -> str:
-        text = ""
+        text = ''
         for statement in self.statements:
             text += statement.get_as_executable_script()
         return text
