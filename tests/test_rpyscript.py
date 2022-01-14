@@ -1,6 +1,7 @@
 from typing import List
 import rlexeme
 import rtoken
+import rscript
 
 def test_get_lexemes():
 
@@ -366,5 +367,208 @@ def test_get_lst_tokens():
 
 def test_get_as_executable_script():
     # RSyntacticName
-    input_string = ''
+    input_string = 'a+b\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
 
+    input_string = 'x[3:5]<-13:15;names(x)[3]<-"Three"\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = 'f1(f2(),f3(a),f4(b=1),f5(c=2,3),f6(4,d=5),f7(,),f8(,,),f9(,,,),f10(a,,))\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == 'f1(f2(),f3(a),f4(b =1),f5(c =2,3),f6(4,d =5),f7(,),f8(,,),f9(,,,),f10(a,,))\n'
+
+    input_string = 'f0(f1(),f2(a),f3(f4()),f5(f6(f7(b))))\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = 'f0(o4a=o4b,o4c=(o8a+o8b)*(o8c-o8d),o4d=f4a(o6e=o6f,o6g=o6h))\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == 'f0(o4a =o4b,o4c =(o8a+o8b)*(o8c-o8d),o4d =f4a(o6e =o6f,o6g =o6h))\n'
+
+    input_string = 'a+b+c\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = '2+1-10/5*3\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = '1+2-3*10/5\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = '(a-b)*(c+d)\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = 'a/(b)*((c))+(d-e)/f*g+(((d-e)/f)*g)\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == 'a/(b)*(c)+(d-e)/f*g+(((d-e)/f)*g)\n'
+
+    input_string = 'var1<-pkg1::var2\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = 'var1<-pkg1::obj1$obj2$var2\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = 'var1<-pkg1::obj1$fun1(para1,para2)\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = 'a<-b::c(d)+e\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = 'f1(~a,b~,-c,+d,e~(f+g),!h,i^(-j),k+(~l),m~(~n),o/-p,q*+r)\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = 'a[1]-b[c(d)+e]/f(g[2],h[3],i[4]*j[5])-k[l[m[6]]]\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = 'a[[1]]-b[[c(d)+e]]/f(g[[2]],h[[3]],i[[4]]*j[[5]])-k[[l[[m[6]]]]]\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = 'df[["a"]]\nlst[["a"]][["b"]]\n' # same as 'df$a' and 'lst$a$b'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = 'x<-"a";df[x]\n' #same as 'df$a' and 'lst$a$b'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = 'df<-data.frame(x = 1:10, y = 11:20, z = letters[1:10])\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = 'x[3:5]<-13:15;names(x)[3]<-"Three"\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = 'data_book$display_daily_table(data_name = "dodoma", climatic_element = "rain", ' + \
+                   'date_col = "Date", year_col = "year", Misscode = "m", monstats = c(sum = "sum"))\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = 'stringr::str_split_fixed(string = date,pattern = " - ",n = "5 ")\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = 'ggplot2::ggplot(data = c(sum = "sum"),mapping = ggplot2::aes(x = fert,y = size,colour = variety))\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = 'last_graph<-ggplot2::ggplot(data = survey,mapping = ggplot2::aes(x = fert,y = size,colour = variety))' + \
+            '+ggplot2::geom_line()' + \
+            '+ggplot2::geom_rug(colour = "orange")' + \
+            '+theme_grey()' + \
+            '+ggplot2::theme(axis.text.x = ggplot2::element_text())' + \
+            '+ggplot2::facet_grid(facets = village~variety,space = "fixed")\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = 'dodoma <- data_book$get_data_frame(data_name = "dodoma", stack_data = TRUE, measure.vars = c("rain", "tmax", "tmin"), id.vars = c("Date"))\n' + \
+                   'last_graph <- ggplot2::ggplot(data = dodoma, mapping = ggplot2::aes(x = date, y = value, colour = variable)) + ggplot2::geom_line() + ' + \
+                       'ggplot2::geom_rug(data = dodoma%%>%%filter(is.na(value)), colour = "red") + theme_grey() + ggplot2::theme(axis.text.x = ggplot2::element_text(), legend.position = "none") + ' + \
+                       'ggplot2::facet_wrap(scales = "free_y", ncol = 1, facet = ~variable) + ggplot2::xlab(NULL)\n' + \
+                   'data_book$add_graph(graph_name = "last_graph", graph = last_graph, data_name = "dodoma")\n' + \
+                   'data_book$get_graphs(data_name = "dodoma", graph_name = "last_graph")\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = 'a->b\nc->>d\ne<-f\ng<<-h\ni=j\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = 'x<-df$`a b`\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = 'names(x)<-c("a","b")\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = 'a<-b\rc(d)\r\ne->>f+g\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == 'a<-b\nc(d)\ne->>f+g\n'
+
+    input_string = ' f1(  f2(),   f3( a),  f4(  b =1))\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = '  f0(   o4a = o4b,  o4c =(o8a   + o8b)  *(   o8c -  o8d),   o4d = f4a(  o6e =   o6f, o6g =  o6h))\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = ' a  /(   b)*( c)  +(   d- e)  /   f *g  +(((   d- e)  /   f)* g)\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = ' a  +   b    +     c\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == ' a  +   b  +     c\n'
+
+    input_string = ' var1  <-   pkg1::obj1$obj2$var2\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = '    pkg ::obj1 $obj2$fn1 (a ,b=1, c    = 2 )\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == '    pkg::obj1$obj2$fn1(a,b =1, c = 2)\n'
+
+    input_string = ' f1(  ~   a,    b ~,  -   c,    + d,  e   ~(    f +  g),   !    h, i  ^(   -    j), k  +(   ~    l), m  ~(   ~    n), o  /   -    p, q  *   +    r)\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = ' a  [\r   1\n] -  b   [c (  d   )+ e  ]   /f (  g   [2 ]  ,   h[ \r\n3  ]  \n ,i [  4   ]* j  [   5] )  -   k[ l  [   m[ 6  ]   ]   ]\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == ' a  [\r   1] -  b   [c(  d)+ e]   /f(  g   [2],   h[ \r\n3],i [  4]* j  [   5]) -   k[ l  [   m[ 6]]]\n'
+
+    input_string = 'f1()#comment1\n' + \
+                   'f2()# comment2\n' + \
+                   'endSyntacticName\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = '#precomment1\n' + \
+                   ' # precomment2\n' + \
+                   '  #  precomment3\n' + \
+                   ' f1(  f2(),   f3( a),  f4(  b =1))#comment1~!@#$%%^&*()_[] {} \\|;:\',./<>?\n' + \
+                   '  f0(   o4a = o4b,  o4c =(o8a   + o8b)  *(   o8c -  o8d),   o4d = f4a(  o6e =   o6f, o6g =  o6h)) # comment2"," cbaa \n' + \
+                   ' a  /(   b)*( c)  +(   d- e)  /   f *g  +(((   d- e)  /   f)* g)   #comment3\n' + \
+                   '#comment 4\n' + \
+                   ' a  +   b  +     c\n\n\n' + \
+                   '  #comment5\n   # comment6 #comment7\n' + \
+                   'endSyntacticName\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == input_string
+
+    input_string = '#comment1\na#comment2\r b #comment3\r\n#comment4\n  c  \r\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == '#comment1\na#comment2\n b #comment3\n#comment4\n  c  \n'
+
+    input_string = '#ignored comment'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == '\n'
+
+    input_string = '#ignored comment\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == '\n'
+
+    input_string = 'f1()\n#ignored comment\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == 'f1()\n'
+
+    input_string = '\n'
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == '\n'
+
+    input_string = ''
+    actual = rscript.RScript(input_string).get_as_executable_script()
+    assert actual == ''

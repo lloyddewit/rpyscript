@@ -31,7 +31,8 @@ examples.
 """
 
 from typing import Dict, List
-from rtoken import RToken
+import rlexeme
+import rtoken
 from rstatement import RStatement
 
 
@@ -47,30 +48,24 @@ class RScript(object):
     """
 
     def __init__(self, script_str: str) -> None:
+        self.tokens: List[rtoken.RToken] = []
+        self.statements: List[RStatement] = []        
+        self.assignments: Dict[str, RStatement] = {}
+
         if not script_str:
             return
 
-        self.tokens: List[RToken] = []
-        self.statements: List[RStatement] = []        
-        pos = 0
-        assignments: Dict[str, RStatement] = {}
-"""         while pos < len(self.tokens):
-            clsStatement: clsRStatement = RStatement(self.tokens, pos, assignments)
-            self.statements.append(clsStatement)
-            if (not ((clsStatement.clsAssignment == None))):
-                if assignments.ContainsKey(clsStatement.clsAssignment.strTxt):
-                    assignments(clsStatement.clsAssignment.strTxt) = clsStatement
-                else:
-                    assignments.Add(clsStatement.clsAssignment.strTxt, clsStatement)
+        self.tokens: List[rtoken.RToken] = rtoken.get_tokens(rlexeme.get_lexemes(script_str))
+        pos: int = 0
+        while pos < len(self.tokens):
+            statement: RStatement = RStatement()
+            pos = statement.set_from_tokens(self.tokens, pos, self.assignments)
+            self.statements.append(statement)
+            if statement.assignment:
+                self.assignments[statement.assignment.text] = statement
      
-    def GetAsExecutableScript(self):
-        strTxt = ""
-        for clsStatement in self.statements:
-            clsStatement.GetAsExecutableScript()
-        return strTxt
-"""
-
-
-    
-
-
+    def get_as_executable_script(self) -> str:
+        text = ''
+        for statement in self.statements:
+            text += statement.get_as_executable_script()
+        return text

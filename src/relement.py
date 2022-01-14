@@ -1,7 +1,7 @@
 from rtoken import RToken, TokenType
 
 class RElement(object):
-    def __init__(self, token: RToken, is_bracketed: bool = False, package_prefix: str = "") -> None:
+    def __init__(self, token: RToken, is_bracketed: bool = False, package_prefix: str = '') -> None:
         self.text: str = token.text
         self.is_bracketed = is_bracketed
         self.prefix: str = package_prefix

@@ -91,9 +91,6 @@ class RToken(object):
             None.
         """
         
-        if not lexeme_current:
-            return
-
         self.text: str = lexeme_current
         self.children: List[RToken] = []
         self.token_type: TokenType = token_type
@@ -139,12 +136,12 @@ class RToken(object):
         elif rlexeme.is_operator_reserved(lexeme_current) or re.search('^%%.*%%$', lexeme_current):
             self.token_type = TokenType.OPERATOR_BINARY      # 'binary operator     (e.g. '+')
 
-    def CloneMe(self):
+    def clone_me(self):
         token = RToken(self.text, token_type = self.token_type)
         for clsTokenChild in self.children:
             if ((clsTokenChild == None)):
                 raise Exception("Token has illegal empty child.")
-            token.children.append(clsTokenChild.CloneMe())
+            token.children.append(clsTokenChild.clone_me())
         return token
 
 def get_tokens(lexemes: List[str]) -> List[RToken]:
